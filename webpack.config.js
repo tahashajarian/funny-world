@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyPlugin = require("copy-webpack-plugin");
 
 module.exports = {
   entry: './src/index.js',
@@ -9,17 +10,19 @@ module.exports = {
     clean: true,
   },
   devServer: {
-    static: './build',
+    static: path.resolve(__dirname, 'build'),
   },
   module: {
-    rules: [
-      {
-        test: /\.css$/i,
-        use: ['style-loader', 'css-loader'],
+    rules: [{
+        test: /\.js$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader',
+        }
       },
       {
-        test: /\.(png|svg|jpg|jpeg|gif)$/i,
-        type: 'asset/resource',
+        test: /\.css$/i,
+        use: ['style-loader', 'css-loader', 'postcss-loader'],
       },
       {
         test: /\.(woff|woff2|eot|ttf|otf)$/i,
@@ -29,7 +32,13 @@ module.exports = {
   },
   plugins: [
     new HtmlWebpackPlugin({
-      title: 'Output Management',
+      template: path.resolve(__dirname, 'index.html'),
+    }),
+    new CopyPlugin({
+      patterns: [{
+        from: path.resolve(__dirname, 'assets/**/*'),
+        to: path.resolve(__dirname, 'build')
+      }, ],
     }),
   ],
 };

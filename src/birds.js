@@ -1,10 +1,8 @@
-import './style.css';
 import * as THREE from 'three';
 // import Stats from "three/examples/jsm/libs/stats.module";
 // import {
 //   GUI
 // } from 'dat.gui';
-
 
 //import shaders
 import birdFS from './shaders/bird-FS.glsl'
@@ -13,291 +11,241 @@ import fragmentShaderPosition from './shaders/fragment-shader-position.glsl'
 import fragmentShaderVelocity from './shaders/fragment-shader-velocity.glsl'
 import GPUComputationRenderer from './distes/gpu-computation-renderer.js';
 
+import {
+  isInViewport,
+  isSafari
+} from './utils/function'
+import BirdGeometry from './bird-geomertry';
 
-/* TEXTURE WIDTH FOR SIMULATION */
-const WIDTH = 32;
-const BIRDS = WIDTH * WIDTH;
-// Custom Geometry - using 3 triangles each. No UVs, no normals currently.
-class BirdGeometry extends THREE.BufferGeometry {
-  constructor() {
-    super();
-    const trianglesPerBird = 3;
-    const triangles = BIRDS * trianglesPerBird;
-    const points = triangles * 3;
-    const vertices = new THREE.BufferAttribute(new Float32Array(points * 3), 3);
-    const birdColors = new THREE.BufferAttribute(new Float32Array(points * 3), 3);
-    const references = new THREE.BufferAttribute(new Float32Array(points * 2), 2);
-    const birdVertex = new THREE.BufferAttribute(new Float32Array(points), 1);
-    this.setAttribute('position', vertices);
-    this.setAttribute('birdColor', birdColors);
-    this.setAttribute('reference', references);
-    this.setAttribute('birdVertex', birdVertex);
-    // this.setAttribute( 'normal', new Float32Array( points * 3 ), 3 );
-    let v = 0;
+export default class Birds {
+  constructor(renderer, canvasContainer) {
+    this.canvasContainer = canvasContainer
+    this.renderer = renderer;
+    this.mouse = {
+      x: 0,
+      y: 0
+    }
+    this.halfScreen = {
+      w: this.canvasContainer.offsetWidth / 2,
+      h: this.canvasContainer.offsetHeight / 2
+    }
+    this.BOUNDS = 800;
+    this.BOUNDS_HALF = this.BOUNDS / 2;
+    this.last = performance.now();
+    this.WIDTH = 20;
+    this.BIRDS = this.WIDTH * this.WIDTH;
 
-    function verts_push() {
-      for (let i = 0; i < arguments.length; i++) {
-        vertices.array[v++] = arguments[i];
+    this.init()
+  }
+
+  init() {
+    this.camera = new THREE.PerspectiveCamera(75, this.canvasContainer.offsetWidth / this.canvasContainer.offsetHeight, 0.1, 3000)
+    this.camera.position.z = 350;
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0xD8F2FF);
+    this.scene.fog = new THREE.Fog(0xffffff, 100, 1000);
+    if (!this.renderer) {
+      this.renderer = new THREE.WebGLRenderer({
+        // canvas: this.canvas,
+        antialias: true,
+      });
+    }
+    this.canvasContainer.appendChild(this.renderer.domElement)
+
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setSize(this.canvasContainer.offsetWidth, this.canvasContainer.offsetHeight);
+    this.initComputeRenderer();
+    // stats = new Stats();
+    // container.appendChild(stats.dom);
+    this.canvasContainer.style.touchAction = 'none';
+    window.addEventListener('pointermove', this.onPointerMove.bind(this));
+    window.addEventListener('resize', this.onWindowResize.bind(this));
+    // const gui = new GUI();
+    this.effectController = {
+      separation: 20.0,
+      alignment: 20.0,
+      cohesion: 20.0,
+      freedom: 0.75
+    };
+    this.valuesChanger();
+    // gui controllers 👇
+    // gui.add(this.effectController, 'separation', 0.0, 100.0, 1.0).onChange(valuesChanger);
+    // gui.add(this.effectController, 'alignment', 0.0, 100, 0.001).onChange(valuesChanger);
+    // gui.add(this.effectController, 'cohesion', 0.0, 100, 0.025).onChange(valuesChanger);
+    // gui.close();
+    this.initBirds();
+  }
+
+  // gui controllers 👇
+  valuesChanger() {
+    this.velocityUniforms['separationDistance'].value = this.effectController.separation;
+    this.velocityUniforms['alignmentDistance'].value = this.effectController.alignment;
+    this.velocityUniforms['cohesionDistance'].value = this.effectController.cohesion;
+    this.velocityUniforms['freedomFactor'].value = this.effectController.freedom;
+  };
+
+  initBirds() {
+    const geometry = new BirdGeometry(this.WIDTH);
+    // For Vertex and Fragment
+    this.birdUniforms = {
+      'color': {
+        value: new THREE.Color(0xff2200)
+      },
+      'texturePosition': {
+        value: null
+      },
+      'textureVelocity': {
+        value: null
+      },
+      'time': {
+        value: 1.0
+      },
+      'delta': {
+        value: 0.0
       }
-    }
-    const wingsSpan = 20;
-    for (let f = 0; f < BIRDS; f++) {
-      // Body
-      verts_push(
-        0, -0, -20,
-        0, 4, -20,
-        0, 0, 30
-      );
-      // Wings
-      verts_push(
-        0, 0, -15,
-        -wingsSpan, 0, 0,
-        0, 0, 15
-      );
-      verts_push(
-        0, 0, 15,
-        wingsSpan, 0, 0,
-        0, 0, -15
-      );
-    }
-    for (let v = 0; v < triangles * 3; v++) {
-      const triangleIndex = ~~(v / 3);
-      const birdIndex = ~~(triangleIndex / trianglesPerBird);
-      const x = (birdIndex % WIDTH) / WIDTH;
-      const y = ~~(birdIndex / WIDTH) / WIDTH;
-      const c = new THREE.Color(
-        0x444444 +
-        ~~(v / 9) / BIRDS * 0x666666
-      );
-      birdColors.array[v * 3 + 0] = c.r;
-      birdColors.array[v * 3 + 1] = c.g;
-      birdColors.array[v * 3 + 2] = c.b;
-      references.array[v * 2] = x;
-      references.array[v * 2 + 1] = y;
-      birdVertex.array[v] = v % 9;
-    }
-    this.scale(0.2, 0.2, 0.2);
+    };
+
+    // THREE.ShaderMaterial
+    const material = new THREE.ShaderMaterial({
+      uniforms: this.birdUniforms,
+      vertexShader: birdVS,
+      fragmentShader: birdFS,
+      side: THREE.DoubleSide
+    });
+    const birdMesh = new THREE.Mesh(geometry, material);
+    birdMesh.rotation.y = Math.PI / 2;
+    birdMesh.matrixAutoUpdate = false;
+    birdMesh.updateMatrix();
+    this.scene.add(birdMesh);
   }
-}
 
-//
-let container, stats;
-let camera, scene, renderer;
-let mouseX = 0,
-  mouseY = 0;
-let windowHalfX = window.innerWidth / 2;
-let windowHalfY = window.innerHeight / 2;
-const BOUNDS = 800,
-  BOUNDS_HALF = BOUNDS / 2;
-let last = performance.now();
-let gpuCompute;
-let velocityVariable;
-let positionVariable;
-let positionUniforms;
-let velocityUniforms;
-let birdUniforms;
-
-init();
-animate();
-
-function init() {
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 3000);
-  camera.position.z = 350;
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xffffff);
-  scene.fog = new THREE.Fog(0xffffff, 100, 1000);
-  renderer = new THREE.WebGLRenderer();
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  container.appendChild(renderer.domElement);
-  initComputeRenderer();
-  // stats = new Stats();
-  // container.appendChild(stats.dom);
-  container.style.touchAction = 'none';
-  container.addEventListener('pointermove', onPointerMove);
-  //
-  window.addEventListener('resize', onWindowResize);
-  // const gui = new GUI();
-  const effectController = {
-    separation: 20.0,
-    alignment: 20.0,
-    cohesion: 20.0,
-    freedom: 0.75
-  };
-  const valuesChanger = function () {
-    velocityUniforms['separationDistance'].value = effectController.separation;
-    velocityUniforms['alignmentDistance'].value = effectController.alignment;
-    velocityUniforms['cohesionDistance'].value = effectController.cohesion;
-    velocityUniforms['freedomFactor'].value = effectController.freedom;
-  };
-  valuesChanger();
-  // gui.add(effectController, 'separation', 0.0, 100.0, 1.0).onChange(valuesChanger);
-  // gui.add(effectController, 'alignment', 0.0, 100, 0.001).onChange(valuesChanger);
-  // gui.add(effectController, 'cohesion', 0.0, 100, 0.025).onChange(valuesChanger);
-  // gui.close();
-  initBirds();
-}
-
-function initComputeRenderer() {
-  gpuCompute = new GPUComputationRenderer(WIDTH, WIDTH, renderer);
-  if (isSafari()) {
-    gpuCompute.setDataType(THREE.HalfFloatType);
-  }
-  const dtPosition = gpuCompute.createTexture();
-  const dtVelocity = gpuCompute.createTexture();
-  fillPositionTexture(dtPosition);
-  fillVelocityTexture(dtVelocity);
-  velocityVariable = gpuCompute.addVariable('textureVelocity', fragmentShaderVelocity, dtVelocity);
-  positionVariable = gpuCompute.addVariable('texturePosition', fragmentShaderPosition, dtPosition);
-  gpuCompute.setVariableDependencies(velocityVariable, [positionVariable, velocityVariable]);
-  gpuCompute.setVariableDependencies(positionVariable, [positionVariable, velocityVariable]);
-  positionUniforms = positionVariable.material.uniforms;
-  velocityUniforms = velocityVariable.material.uniforms;
-  positionUniforms['time'] = {
-    value: 0.0
-  };
-  positionUniforms['delta'] = {
-    value: 0.0
-  };
-  velocityUniforms['time'] = {
-    value: 1.0
-  };
-  velocityUniforms['delta'] = {
-    value: 0.0
-  };
-  velocityUniforms['testing'] = {
-    value: 1.0
-  };
-  velocityUniforms['separationDistance'] = {
-    value: 1.0
-  };
-  velocityUniforms['alignmentDistance'] = {
-    value: 1.0
-  };
-  velocityUniforms['cohesionDistance'] = {
-    value: 1.0
-  };
-  velocityUniforms['freedomFactor'] = {
-    value: 1.0
-  };
-  velocityUniforms['predator'] = {
-    value: new THREE.Vector3()
-  };
-  velocityVariable.material.defines.BOUNDS = BOUNDS.toFixed(2);
-  velocityVariable.wrapS = THREE.RepeatWrapping;
-  velocityVariable.wrapT = THREE.RepeatWrapping;
-  positionVariable.wrapS = THREE.RepeatWrapping;
-  positionVariable.wrapT = THREE.RepeatWrapping;
-  const error = gpuCompute.init();
-  if (error !== null) {
-    console.error(error);
-  }
-}
-
-function isSafari() {
-  return !!navigator.userAgent.match(/Safari/i) && !navigator.userAgent.match(/Chrome/i);
-}
-
-function initBirds() {
-  const geometry = new BirdGeometry();
-  // For Vertex and Fragment
-  birdUniforms = {
-    'color': {
-      value: new THREE.Color(0xff2200)
-    },
-    'texturePosition': {
-      value: null
-    },
-    'textureVelocity': {
-      value: null
-    },
-    'time': {
-      value: 1.0
-    },
-    'delta': {
+  initComputeRenderer() {
+    this.gpuCompute = new GPUComputationRenderer(this.WIDTH, this.WIDTH, this.renderer);
+    if (isSafari()) {
+      this.gpuCompute.setDataType(THREE.HalfFloatType);
+    }
+    const dtPosition = this.gpuCompute.createTexture();
+    const dtVelocity = this.gpuCompute.createTexture();
+    this.fillPositionTexture(dtPosition);
+    this.fillVelocityTexture(dtVelocity);
+    this.velocityVariable = this.gpuCompute.addVariable('textureVelocity', fragmentShaderVelocity, dtVelocity);
+    this.positionVariable = this.gpuCompute.addVariable('texturePosition', fragmentShaderPosition, dtPosition);
+    this.gpuCompute.setVariableDependencies(this.velocityVariable, [this.positionVariable, this.velocityVariable]);
+    this.gpuCompute.setVariableDependencies(this.positionVariable, [this.positionVariable, this.velocityVariable]);
+    this.positionUniforms = this.positionVariable.material.uniforms;
+    this.velocityUniforms = this.velocityVariable.material.uniforms;
+    this.positionUniforms['time'] = {
       value: 0.0
+    };
+    this.positionUniforms['delta'] = {
+      value: 0.0
+    };
+    this.velocityUniforms['time'] = {
+      value: 1.0
+    };
+    this.velocityUniforms['delta'] = {
+      value: 0.0
+    };
+    this.velocityUniforms['testing'] = {
+      value: 1.0
+    };
+    this.velocityUniforms['separationDistance'] = {
+      value: 1.0
+    };
+    this.velocityUniforms['alignmentDistance'] = {
+      value: 1.0
+    };
+    this.velocityUniforms['cohesionDistance'] = {
+      value: 1.0
+    };
+    this.velocityUniforms['freedomFactor'] = {
+      value: 1.0
+    };
+    this.velocityUniforms['predator'] = {
+      value: new THREE.Vector3()
+    };
+    this.velocityVariable.material.defines.BOUNDS = this.BOUNDS.toFixed(2);
+    this.velocityVariable.wrapS = THREE.RepeatWrapping;
+    this.velocityVariable.wrapT = THREE.RepeatWrapping;
+    this.positionVariable.wrapS = THREE.RepeatWrapping;
+    this.positionVariable.wrapT = THREE.RepeatWrapping;
+    const error = this.gpuCompute.init();
+    if (error !== null) {
+      console.error(error);
     }
-  };
-
-  // THREE.ShaderMaterial
-  const material = new THREE.ShaderMaterial({
-    uniforms: birdUniforms,
-    vertexShader: birdVS,
-    fragmentShader: birdFS,
-    side: THREE.DoubleSide
-  });
-  const birdMesh = new THREE.Mesh(geometry, material);
-  birdMesh.rotation.y = Math.PI / 2;
-  birdMesh.matrixAutoUpdate = false;
-  birdMesh.updateMatrix();
-  scene.add(birdMesh);
-}
-
-function fillPositionTexture(texture) {
-  const theArray = texture.image.data;
-  for (let k = 0, kl = theArray.length; k < kl; k += 4) {
-    const x = Math.random() * BOUNDS - BOUNDS_HALF;
-    const y = Math.random() * BOUNDS - BOUNDS_HALF;
-    const z = Math.random() * BOUNDS - BOUNDS_HALF;
-    theArray[k + 0] = x;
-    theArray[k + 1] = y;
-    theArray[k + 2] = z;
-    theArray[k + 3] = 1;
   }
-}
 
-function fillVelocityTexture(texture) {
-  const theArray = texture.image.data;
-  for (let k = 0, kl = theArray.length; k < kl; k += 4) {
-    const x = Math.random() - 0.5;
-    const y = Math.random() - 0.5;
-    const z = Math.random() - 0.5;
-    theArray[k + 0] = x * 10;
-    theArray[k + 1] = y * 10;
-    theArray[k + 2] = z * 10;
-    theArray[k + 3] = 1;
+  render() {
+    const now = performance.now();
+    let delta = (now - this.last) / 1000;
+    if (delta > 1) delta = 1; // safety cap on large deltas
+    this.last = now;
+    this.positionUniforms['time'].value = now;
+    this.positionUniforms['delta'].value = delta;
+    this.velocityUniforms['time'].value = now;
+    this.velocityUniforms['delta'].value = delta;
+    this.birdUniforms['time'].value = now;
+    this.birdUniforms['delta'].value = delta;
+    this.velocityUniforms['predator'].value.set(0.5 * this.mouse.x / this.halfScreen.w, -0.5 * this.mouse.y / this.halfScreen.h, 0);
+    this.mouse = {
+      x: 10000,
+      y: 10000
+    }
+    this.gpuCompute.compute();
+    this.birdUniforms['texturePosition'].value = this.gpuCompute.getCurrentRenderTarget(this.positionVariable).texture;
+    this.birdUniforms['textureVelocity'].value = this.gpuCompute.getCurrentRenderTarget(this.velocityVariable).texture;
+    this.renderer.render(this.scene, this.camera);
   }
-}
 
-function onWindowResize() {
-  windowHalfX = window.innerWidth / 2;
-  windowHalfY = window.innerHeight / 2;
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-}
+  animate() {
+    if (!isInViewport(this.canvasContainer)) return;
+    this.render();
+    // stats.update();
+  }
 
-function onPointerMove(event) {
-  if (event.isPrimary === false) return;
-  mouseX = event.clientX - windowHalfX;
-  mouseY = event.clientY - windowHalfY;
-}
 
-//
-function animate() {
-  requestAnimationFrame(animate);
-  render();
-  // stats.update();
-}
+  fillPositionTexture(texture) {
+    const theArray = texture.image.data;
+    for (let k = 0, kl = theArray.length; k < kl; k += 4) {
+      const x = Math.random() * this.BOUNDS - this.BOUNDS_HALF;
+      const y = Math.random() * this.BOUNDS - this.BOUNDS_HALF;
+      const z = Math.random() * this.BOUNDS - this.BOUNDS_HALF;
+      theArray[k + 0] = x;
+      theArray[k + 1] = y;
+      theArray[k + 2] = z;
+      theArray[k + 3] = 1;
+    }
+  }
 
-function render() {
-  const now = performance.now();
-  let delta = (now - last) / 1000;
-  if (delta > 1) delta = 1; // safety cap on large deltas
-  last = now;
-  positionUniforms['time'].value = now;
-  positionUniforms['delta'].value = delta;
-  velocityUniforms['time'].value = now;
-  velocityUniforms['delta'].value = delta;
-  birdUniforms['time'].value = now;
-  birdUniforms['delta'].value = delta;
-  velocityUniforms['predator'].value.set(0.5 * mouseX / windowHalfX, -0.5 * mouseY / windowHalfY, 0);
-  mouseX = 10000;
-  mouseY = 10000;
-  gpuCompute.compute();
-  birdUniforms['texturePosition'].value = gpuCompute.getCurrentRenderTarget(positionVariable).texture;
-  birdUniforms['textureVelocity'].value = gpuCompute.getCurrentRenderTarget(velocityVariable).texture;
-  renderer.render(scene, camera);
+  fillVelocityTexture(texture) {
+    const theArray = texture.image.data;
+    for (let k = 0, kl = theArray.length; k < kl; k += 4) {
+      const x = Math.random() - 0.5;
+      const y = Math.random() - 0.5;
+      const z = Math.random() - 0.5;
+      theArray[k + 0] = x * 10;
+      theArray[k + 1] = y * 10;
+      theArray[k + 2] = z * 10;
+      theArray[k + 3] = 1;
+    }
+  }
+
+  onWindowResize() {
+    this.halfScreen = {
+      w: this.canvasContainer.innerWidth / 2,
+      h: this.canvasContainer.innerHeight / 2
+    }
+    this.camera.aspect = this.canvasContainer.offsetWidth / this.canvasContainer.offsetHeight
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(this.canvasContainer.offsetWidth, this.canvasContainer.offsetHeight);
+  }
+
+  onPointerMove(event) {
+    if (event.isPrimary === false) return;
+    this.mouse = {
+      x: event.clientX - this.halfScreen.w,
+      y: event.clientY - this.halfScreen.h
+    }
+  }
+
 }

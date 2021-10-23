@@ -121,21 +121,22 @@ export default class Earth {
 		})
 		const starVertices = []
 
-		for (let i = 0; i < 10000; i++) {
+		for (let i = 0; i < 20000; i++) {
 			const x = (Math.random() - 0.5) * 2000;
 			const y = (Math.random() - 0.5) * 2000;
-			const z = -(Math.random()) * 3500;
+			const z = (Math.random() - 0.5) * 2000;
+			// const z = -(Math.random()) * 3500;
 			starVertices.push(x, y, z)
 		}
 		startGeometry.setAttribute(
 			'position', new THREE.Float32BufferAttribute(starVertices, 3)
 		)
-		const starts = new THREE.Points(startGeometry, startMaterial);
-		this.scene.add(starts)
+		this.stars = new THREE.Points(startGeometry, startMaterial);
+		this.scene.add(this.stars)
 	}
 
 	createFog() {
-		// this.scene.fog = new THREE.Fog(0xcce0ff, 100, 1000);
+		this.scene.fog = new THREE.FogExp2(0x000000, 0.0008);
 	}
 
 	initEvents() {
@@ -165,6 +166,10 @@ export default class Earth {
 		this.earth.rotation.y += 0.001;
 		this.meshClouds.rotation.x += 0.001;
 		this.meshClouds.rotation.y += 0.002;
+		this.stars.rotation.x += 0.00001;
+		this.stars.rotation.y += 0.00001;
+		this.stars.rotation.z += 0.00001;
+		
 		this.stats.update();
 		//
 		// this.earthGroup.rotation.x = this.mouse.y

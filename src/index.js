@@ -22,8 +22,8 @@ class ThreeCanvases {
 		this.animate();
 	}
 	initCanvas() {
-		this.earth = new Earth(this.renderer, this.earthCanvas);
-		this.birds = new Birds(this.renderer, this.birdCanvas);
+		this.earth = new Earth(undefined, this.earthCanvas);
+		this.birds = new Birds(undefined, this.birdCanvas);
 	}
 	animate() {
 		requestAnimationFrame(() => {

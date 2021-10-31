@@ -1,9 +1,9 @@
 import Earth from './earth'
 import Birds from './birds'
 import './style.css'
-import {
-	isInViewport
-} from './utils/function';
+
+import Stats from "three/examples/jsm/libs/stats.module";
+
 
 import * as THREE from 'three';
 
@@ -16,10 +16,13 @@ class ThreeCanvases {
 		this.renderer = new THREE.WebGLRenderer({
 			antialias: true,
 		})
+		this.stats = Stats();
 		this.birdCanvas = document.querySelector('#canvas-birds-container');
 		this.earthCanvas = document.querySelector('#canvas-earth-container');
 		this.initCanvas();
 		this.animate();
+		document.body.appendChild(this.stats.dom);
+
 	}
 	initCanvas() {
 		this.earth = new Earth(undefined, this.earthCanvas);
@@ -29,6 +32,7 @@ class ThreeCanvases {
 		requestAnimationFrame(() => {
 			this.animate();
 		})
+		this.stats.update();
 		this.birds.animate();
 		this.earth.animate();
 		// this.renderer.render(this.birds.scene, this.birds.camera)

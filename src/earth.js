@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import Stats from "three/examples/jsm/libs/stats.module";
 import vertexShader from './shaders/vertex.glsl'
 import fragmentShader from './shaders/fragment.glsl'
 import vertexShaderAtmespher from './shaders/vertexAtmespher.glsl'
@@ -35,8 +34,6 @@ export default class Earth {
 		}
 		this.renderer.setSize(this.canvasContainer.offsetWidth, this.canvasContainer.offsetHeight)
 		this.renderer.setPixelRatio(window.devicePixelRatio)
-		this.stats = Stats();
-		this.appendToDom()
 		this.createEarth()
 		this.addStarts()
 		this.initEvents()
@@ -84,8 +81,10 @@ export default class Earth {
 							'assets/images/earth.jpg'
 						)
 					}
-				}
+				},
+				transparent: true
 			})
+			
 		)
 
 		const materialClouds = new THREE.MeshLambertMaterial({
@@ -121,7 +120,7 @@ export default class Earth {
 		})
 		const starVertices = []
 
-		for (let i = 0; i < 20000; i++) {
+		for (let i = 0; i < 10000; i++) {
 			const x = (Math.random() - 0.5) * 2000;
 			const y = (Math.random() - 0.5) * 2000;
 			const z = (Math.random() - 0.5) * 2000;
@@ -152,9 +151,6 @@ export default class Earth {
 		);
 	}
 
-	appendToDom() {
-		document.body.appendChild(this.stats.dom);
-	}
 
 	animate() {
 
@@ -162,15 +158,14 @@ export default class Earth {
 
 
 		this.renderer.render(this.scene, this.camera)
-		this.earth.rotation.x += 0.001;
-		this.earth.rotation.y += 0.001;
-		this.meshClouds.rotation.x += 0.001;
-		this.meshClouds.rotation.y += 0.002;
+		this.earth.rotation.x += 0.0004;
+		this.earth.rotation.y += 0.0004;
+		this.meshClouds.rotation.x += 0.0004;
+		this.meshClouds.rotation.y += 0.0005;
 		this.stars.rotation.x += 0.00001;
 		this.stars.rotation.y += 0.00001;
 		this.stars.rotation.z += 0.00001;
-		
-		this.stats.update();
+
 		//
 		// this.earthGroup.rotation.x = this.mouse.y
 		gsap.to(

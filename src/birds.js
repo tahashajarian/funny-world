@@ -32,7 +32,7 @@ export default class Birds {
     this.BOUNDS = 800;
     this.BOUNDS_HALF = this.BOUNDS / 2;
     this.last = performance.now();
-    this.WIDTH = 20;
+    this.WIDTH = 25;
     this.BIRDS = this.WIDTH * this.WIDTH;
 
     this.init()

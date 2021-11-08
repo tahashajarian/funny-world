@@ -161,7 +161,7 @@ export default class Earth {
 		this.earth.rotation.x += 0.0004;
 		this.earth.rotation.y += 0.0004;
 		this.meshClouds.rotation.x += 0.0004;
-		this.meshClouds.rotation.y += 0.0005;
+		this.meshClouds.rotation.y += 0.0008;
 		this.stars.rotation.x += 0.00001;
 		this.stars.rotation.y += 0.00001;
 		this.stars.rotation.z += 0.00001;

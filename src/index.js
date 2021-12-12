@@ -5,14 +5,34 @@ import {
 	OrbitControls
 } from 'three/examples/jsm/controls/OrbitControls'
 
+
+const VS = `				
+varying vec3 v_Normal;
+	void main() {
+		gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position , 1.0);
+		v_Normal = normal;
+	}
+`
+
+const FS = `
+	varying vec3 v_Normal;
+	uniform vec3 sphereColor;
+	void main() {
+		// gl_FragColor = vec4(v_Normal, 0.5);
+		gl_FragColor = vec4(sphereColor, 1);
+	}
+`
+
+
+
 class ThreeCanvases {
 	constructor() {
 		this.initCanvas();
 		this.addCubes();
-		this.addPlate();
+		this.addPlane();
 		this.addLights();
+		this.enableListeners();
 		this.animate();
-
 	}
 
 	initCanvas() {
@@ -24,6 +44,7 @@ class ThreeCanvases {
 		this.camera.position.y = 2
 		this.renderer = new THREE.WebGLRenderer({
 			antialias: true,
+			alpha: 0.5,
 		})
 		this.canvasContainer.appendChild(this.renderer.domElement)
 		this.renderer.setSize(this.canvasContainer.offsetWidth, this.canvasContainer.offsetHeight)
@@ -31,6 +52,7 @@ class ThreeCanvases {
 		this.renderer.shadowMap.enabled = true;
 		document.body.appendChild(this.stats.dom);
 		this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+		this.totalTime = 0.0;
 	}
 
 
@@ -48,27 +70,39 @@ class ThreeCanvases {
 		centerCube.position.set(0, 1, 0)
 		this.cubes = new THREE.Group();
 
-		for (let i = 0; i <= 5; i++) {
-			const cube = new THREE.Mesh(geometry, material);
-			cube.position.set(i + r, 1, i + r)
-			this.cubes.add(cube)
-		}
+		// for (let i = 0; i <= 5; i++) {
+		// 	const cube = new THREE.Mesh(geometry, material);
+		// 	cube.position.set(i + r, 1, i + r)
+		// 	this.cubes.add(cube)
+		// }
 
 		this.cubes.add(centerCube)
-		this.scene.add(this.cubes)
+		// this.scene.add(this.cubes)
 	}
 
-	addPlate() {
-		const geometry = new THREE.PlaneGeometry(30, 30);
-		const material = new THREE.MeshPhysicalMaterial({
-			color: 0xffffff,
-			// wireframe: true,
+	addPlane() {
+		const planeSize = 10;
+		this.planeGeometry = new THREE.SphereBufferGeometry(5, 32, 32);
+		// const material = new THREE.MeshPhongMaterial({
+		// 	color: 0x0000ff,
+		// 	side: THREE.DoubleSide,
+		// 	// wireframe: true,
+		// });
+		this.sphereMaterial = new THREE.ShaderMaterial({
+			color: 0x00ff00,
+			vertexShader: VS,
+			fragmentShader: FS,
+			wireframe: false,
+			uniforms: {
+				sphereColor: {
+					value: new THREE.Vector3(0, 0, 1)
+				}
+			}
 		});
-		const plane = new THREE.Mesh(geometry, material);
-		plane.rotation.set(-Math.PI / 2, 0, 0)
-		plane.castShadow = true;
-		plane.receiveShadow = true;
-		this.scene.add(plane)
+		this.plane = new THREE.Mesh(this.planeGeometry, this.sphereMaterial);
+		this.plane.rotation.set(-Math.PI / 2, 0, 0)
+		this.planePointes = this.planeGeometry.attributes.position.count;
+		this.scene.add(this.plane);
 	}
 
 	addLights() {
@@ -91,8 +125,32 @@ class ThreeCanvases {
 		requestAnimationFrame(() => {
 			this.animate();
 		})
+		const now = Date.now() / 300;
 		this.stats.update();
 		this.renderer.render(this.scene, this.camera);
+		// 	for (let i = 0; i < this.planePointes; i++) {
+		// 		const x = this.planeGeometry.attributes.position.getX(i)
+		// 		const y = this.planeGeometry.attributes.position.getY(i)
+		// 		const sinX = Math.sin(x + now) * 0.5;
+		// 		const cosY = Math.cos(y + now) * 0.5;
+
+		// 		this.planeGeometry.attributes.position.setZ(i, sinX + cosY)
+		// 		this.planeGeometry.attributes.position.needsUpdate = true;
+		// 		this.planeGeometry.computeVertexNormals();
+		// 	}
+		const v = Math.sin(now) * 0.5 + 0.5
+		const c1 = new THREE.Vector3(1, 0, 0);
+		const c2 = new THREE.Vector3(0, 1, 0);
+		const sphereColor = c1.lerp(c2, v);
+		this.sphereMaterial.uniforms.sphereColor.value = sphereColor;
+	}
+
+	enableListeners() {
+		window.addEventListener('resize', () => {
+			this.renderer.setSize(this.canvasContainer.offsetWidth, this.canvasContainer.offsetHeight)
+			this.camera.aspect = this.canvasContainer.offsetWidth / this.canvasContainer.offsetHeight
+			this.camera.updateProjectionMatrix()
+		})
 	}
 }
 
